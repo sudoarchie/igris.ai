@@ -1,13 +1,33 @@
 import { generateBlogWithContext } from '@/app/lib/deepseek';
 import { generateBlogWithGemini } from '@/app/lib/gemini';
 import { processUrls } from '@/app/lib/crawler';
+import { searchWeb, searchImages } from '@/app/lib/search';
 import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
   try {
-    const { prompt, urls, model } = await req.json();
+    const { prompt, model } = await req.json();
     
-    const context = await processUrls(urls);
+    // Add validation for required fields
+    if (!prompt || typeof prompt !== 'string') {
+      return NextResponse.json(
+        { error: 'Invalid or missing prompt' },
+        { status: 400 }
+      );
+    }
+
+    // Automatically search for relevant URLs
+    const searchResults: string[] = await searchWeb(prompt);
+    const context = await processUrls(searchResults);
+    
+    // Handle empty context case
+    if (!context) {
+      return NextResponse.json(
+        { error: 'No relevant content found' },
+        { status: 404 }
+      );
+    }
+
     let blogContent;
     
     if (model.startsWith('gpt')) {
@@ -22,15 +42,52 @@ export async function POST(req: Request) {
       blogContent = await generateBlogWithGemini(prompt, context);
     }
     
+    // Add null check for blogContent before using it
+    if (!blogContent) {
+      throw new Error('Failed to generate blog content');
+    }
+
+    // Now TypeScript knows blogContent is string
+    const imageQueries = extractImageQueries(blogContent!);
+    
+    // Explicitly type the images array
+    const images: string[][] = await Promise.all(
+      imageQueries.map(query => searchImages(query))
+    );
+
+    // Add type assertion for flat array
+    const flatImages: string[] = images.flat() as string[];
+    blogContent = replaceImagePlaceholders(blogContent!, flatImages);
+    
     return NextResponse.json({ content: blogContent });
   } catch (error: any) {
-    console.error('Error:', error);
+    // Add proper error logging
+    console.error('API Error:', error);
+    const status = error.status || 500;
+    const errorMessage = error.message || 'Internal server error';
+    const errorDetails = error.details || {};
+
     return NextResponse.json(
       { 
-        error: error?.message || 'Failed to generate blog post',
-        details: error?.response?.data || {} 
+        error: errorMessage,
+        details: errorDetails 
       },
-      { status: error?.status || 500 }
+      { status }
     );
   }
+}
+
+function extractImageQueries(content: string): string[] {
+  // Extract key terms for image search with proper type assertion
+  const terms = content.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g) || [];
+  return Array.from(new Set(terms as RegExpMatchArray)).slice(0, 3);
+}
+
+function replaceImagePlaceholders(content: string, images: string[]): string {
+  let imageIndex = 0;
+  return content.replace(/!\[(.*?)\]\(placeholder\)/g, (match: string, p1: string) => {
+    const imageUrl = images[imageIndex] || 'https://via.placeholder.com/800x400';
+    imageIndex++;
+    return `![${p1}](${imageUrl})`;
+  });
 } 

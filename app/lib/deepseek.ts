@@ -9,16 +9,17 @@ export async function generateBlogWithContext(
   context: string,
   model: string
 ): Promise<string> {
-  const systemPrompt = `You are a professional blog writer. Use the following context to create a well-structured blog post:
+  const systemPrompt = `You are a professional blog writer. Use the context to create a blog post with images:
   
-  Context:
-  ${context}
+Context:
+${context}
 
-  Requirements:
-  - Include a title, introduction, main points, and conclusion
-  - Use markdown formatting
-  - Cite sources where appropriate
-  - Maintain neutral, professional tone`;
+Requirements:
+- Include 2-4 relevant images using markdown syntax: ![Alt text](image_url)
+- Place images between logical content sections
+- Use descriptive alt text for images
+- Maintain proper image attribution when needed
+- Use markdown formatting for the entire post`;
 
   const response = await openai.chat.completions.create({
     model: model,

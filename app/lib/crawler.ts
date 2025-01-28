@@ -4,20 +4,20 @@ import { parse } from 'node-html-parser';
 
 export async function crawlWebsite(url: string): Promise<string> {
   try {
-    const { data } = await axios.get(url);
-    const root = parse(data);
+    const { data } = await axios.get(url, { timeout: 5000 });
+    const $ = cheerio.load(data);
     
-    // Remove unnecessary elements
-    root.querySelectorAll('script, style, nav, footer').forEach(el => el.remove());
+    // Improved content extraction
+    $('script, style, nav, footer, header, iframe').remove();
     
-    // Extract main content
-    const content = root.querySelector('article') || 
-                    root.querySelector('main') || 
-                    root.querySelector('body');
+    // Try to find main content sections
+    const content = 
+      $('article').text() || 
+      $('main').text() ||
+      $('body').text();
     
-    return content?.textContent || '';
+    return content.substring(0, 2000); // Limit per page
   } catch (error) {
-    console.error(`Failed to crawl ${url}:`, error);
     return '';
   }
 }

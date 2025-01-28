@@ -8,15 +8,17 @@ export async function generateBlogWithGemini(
 ): Promise<string> {
   const model = genAI.getGenerativeModel({ model: "gemini-pro" });
   
-  const systemPrompt = `As a professional blog writer, create a well-structured blog post using this context:
-  
-  Context: ${context}
-  
-  Requirements:
-  - Include title, introduction, main points, conclusion
-  - Use markdown formatting
-  - Cite sources where needed
-  - Maintain neutral, professional tone`;
+  const systemPrompt = `When creating the blog post:
+- Include 2-4 markdown image placeholders: ![Description](placeholder)
+- Place images between content sections
+- Use different descriptive alt texts
+- Leave the image URLs as 'placeholder'
+
+Requirements:
+- Include title, introduction, main points, conclusion
+- Use markdown formatting
+- Cite sources where needed
+- Maintain neutral, professional tone`;
   
   try {
     const result = await model.generateContent(`${systemPrompt}\n\nUser Query: ${prompt}`);

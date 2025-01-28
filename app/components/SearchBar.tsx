@@ -7,13 +7,11 @@ interface SearchBarProps {
 
 export default function SearchBar({ onSearch, isLoading }: SearchBarProps) {
   const [query, setQuery] = useState('');
-  const [urls, setUrls] = useState('');
   const [selectedModel, setSelectedModel] = useState('gpt-3.5-turbo');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const urlList = urls.split('\n').filter(url => url.trim() !== '');
-    onSearch(query, urlList, selectedModel);
+    onSearch(query, [], selectedModel);
   };
 
   return (
@@ -38,16 +36,6 @@ export default function SearchBar({ onSearch, isLoading }: SearchBarProps) {
             placeholder="Enter your blog topic..."
           />
         </div>
-      </div>
-      
-      <div className="space-y-2">
-        <label className="block text-sm font-medium">Research URLs (one per line)</label>
-        <textarea
-          value={urls}
-          onChange={(e) => setUrls(e.target.value)}
-          className="w-full p-2 border rounded-md h-32"
-          placeholder="https://example.com/article1\nhttps://example.com/research2"
-        />
       </div>
       
       <div className="relative">
