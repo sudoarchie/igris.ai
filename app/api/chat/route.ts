@@ -48,16 +48,22 @@ export async function POST(req: Request) {
     }
 
     // Now TypeScript knows blogContent is string
-    const imageQueries = extractImageQueries(blogContent!);
-    
-    // Explicitly type the images array
-    const images: string[][] = await Promise.all(
-      imageQueries.map(query => searchImages(query))
-    );
+    const mainTopic = blogContent.split('.')[0].replace(/[^a-zA-Z ]/g, '') || prompt;
 
-    // Add type assertion for flat array
-    const flatImages: string[] = images.flat() as string[];
-    blogContent = replaceImagePlaceholders(blogContent!, flatImages);
+    const imageQueries = extractImageQueries(blogContent, mainTopic);
+    
+    // Search images using combined queries
+    const images = (await Promise.all(
+      imageQueries.map(query => 
+        searchImages(query, mainTopic)
+          .then(results => results.filter(url => 
+            url.match(/\.(jpeg|jpg|png|webp)$/i) && 
+            !url.toLowerCase().includes('logo')
+          ))
+      )
+    )).flat().filter(url => url);
+
+    blogContent = await replaceImagePlaceholders(blogContent, images, mainTopic);
     
     return NextResponse.json({ content: blogContent });
   } catch (error: any) {
@@ -77,17 +83,58 @@ export async function POST(req: Request) {
   }
 }
 
-function extractImageQueries(content: string): string[] {
-  // Extract key terms for image search with proper type assertion
-  const terms = content.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g) || [];
-  return Array.from(new Set(terms as RegExpMatchArray)).slice(0, 3);
+function extractImageQueries(content: string, mainTopic: string): string[] {
+  // Extract meaningful nouns and phrases
+  const phrases = content.match(/(?:\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b)|(?:\b\w{4,}s?\b)/gi) || [];
+  
+  // Filter and prioritize relevant terms
+  const filteredTerms = phrases
+    .filter(term => term.length > 3)
+    .filter(term => !['The', 'And', 'That', 'This'].includes(term))
+    .map(term => term.toLowerCase());
+
+  // Combine with main topic and deduplicate
+  const uniqueTerms = Array.from(new Set([
+    mainTopic,
+    ...filteredTerms
+  ]));
+
+  return uniqueTerms.slice(0, 2); // More focused queries
 }
 
-function replaceImagePlaceholders(content: string, images: string[]): string {
+async function replaceImagePlaceholders(content: string, images: string[], mainTopic: string): Promise<string> {
+  const placeholderMatches = Array.from(content.matchAll(/!\[(.*?)\]\(placeholder\)/g));
   let imageIndex = 0;
-  return content.replace(/!\[(.*?)\]\(placeholder\)/g, (match: string, p1: string) => {
-    const imageUrl = images[imageIndex] || 'https://via.placeholder.com/800x400';
-    imageIndex++;
-    return `![${p1}](${imageUrl})`;
-  });
+
+  const replacements = await Promise.all(
+    placeholderMatches.map(async (match) => {
+      const altText = match[1];
+      const query = imageIndex < images.length ? '' : mainTopic;
+      
+      // Get image URL with proper async handling
+      const imageUrl = images[imageIndex] || 
+        (await searchImages(query, mainTopic).then(res => res[0])) || 
+        'https://via.placeholder.com/800x400';
+      
+      console.log('Image replacement:', {
+        existingImages: images.length,
+        newSearchQuery: query,
+        resultUrl: imageUrl
+      });
+      
+      imageIndex++;
+      return {
+        match: match[0],
+        replacement: `![${altText || mainTopic}](${imageUrl})`
+      };
+    })
+  );
+
+  // Apply all replacements sequentially
+  let result = content;
+  for (const { match, replacement } of replacements) {
+    result = result.replace(match, replacement);
+  }
+  
+  return result;
 } 
